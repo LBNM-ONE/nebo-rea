@@ -14,6 +14,9 @@ TOOLS_DIR="${TOOLS_DIR:-/root/rea-tools}"
 NODE_VERSION="24.18.0"
 GHIDRA_TAG="Ghidra_12.1.4_build"
 GHIDRA_DIR_NAME="ghidra_12.1.4_PUBLIC"
+# Usati solo se api.github.com non risponde. SHA-256 calcolato il 13/10/2026 sul file della release.
+GHIDRA_ZIP_URL="https://github.com/NationalSecurityAgency/ghidra/releases/download/$GHIDRA_TAG/ghidra_12.1.4_PUBLIC_20260921.zip"
+GHIDRA_ZIP_SHA256="ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"
 BIN_DIR="/root/.local/bin"
 ENV_FILE="/root/.rea-env"
 
@@ -28,17 +31,19 @@ download() {
     echo "$sha  $out.partial" | sha256sum -c --quiet - ||
       { rm -f "$out.partial"; die "SHA-256 non corrispondente per $url"; }
   else
-    echo "ATTENZIONE: GitHub non ha fornito un digest; SHA-256 calcolato: $(sha256sum "$out.partial" | cut -d' ' -f1)"
+    echo "ATTENZIONE: nessun digest da verificare; SHA-256 calcolato: $(sha256sum "$out.partial" | cut -d' ' -f1)"
   fi
   mv "$out.partial" "$out"
 }
 
 # Stampa "<url> <sha256|->" dell'asset di una release GitHub ($2 = tag oppure "latest").
+# Se l'API non risponde restituisce 1: alcune reti (proxy delle sessioni cloud) bloccano
+# api.github.com per le repo non collegate ma lasciano passare i download diretti delle release.
 gh_asset() {
   local api="https://api.github.com/repos/$1/releases/tags/$2" json
   [ "$2" = latest ] && api="https://api.github.com/repos/$1/releases/latest"
   json=$(curl -fsSL -H 'Accept: application/vnd.github+json' "$api") ||
-    die "API GitHub non raggiungibile ($api): la rete della sessione deve consentire api.github.com e github.com"
+    { echo "ATTENZIONE: API GitHub non raggiungibile ($api), uso l'URL diretto della release" >&2; return 1; }
   printf '%s' "$json" | node -e '
     let s = "";
     process.stdin.on("data", (d) => (s += d)).on("end", () => {
@@ -90,7 +95,13 @@ JADX_JAR="$TOOLS_DIR/jadx-headless-mcp-0.7.1-all.jar"
 log "5/7 apktool (ultima release)"
 APKTOOL_JAR="$TOOLS_DIR/apktool.jar"
 if [ ! -f "$APKTOOL_JAR" ]; then
-  asset=$(gh_asset iBotPeaches/Apktool latest '^apktool_[0-9.]+\.jar$')
+  asset=$(gh_asset iBotPeaches/Apktool latest '^apktool_[0-9.]+\.jar$') || {
+    # Ultimo tag vX.Y.Z letto via git, che passa anche quando l'API è bloccata.
+    v=$(git ls-remote --tags --refs https://github.com/iBotPeaches/Apktool 'v*' |
+      sed 's#.*refs/tags/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1) || true
+    [ -n "$v" ] || die "versione di apktool non trovata: la rete della sessione deve consentire github.com"
+    asset="https://github.com/iBotPeaches/Apktool/releases/download/v$v/apktool_$v.jar -"
+  }
   read -r url sha <<<"$asset"
   download "$url" "$APKTOOL_JAR" "$sha"
 fi
@@ -105,7 +116,8 @@ if [ "${SKIP_GHIDRA:-0}" != 1 ]; then
   log "6/7 Ghidra 12.1.4 (per le librerie native .so)"
   GHIDRA_DIR="$TOOLS_DIR/$GHIDRA_DIR_NAME"
   if [ ! -x "$GHIDRA_DIR/support/analyzeHeadless" ]; then
-    asset=$(gh_asset NationalSecurityAgency/ghidra "$GHIDRA_TAG" '^ghidra_12\.1\.4_PUBLIC_[0-9]+\.zip$')
+    asset=$(gh_asset NationalSecurityAgency/ghidra "$GHIDRA_TAG" '^ghidra_12\.1\.4_PUBLIC_[0-9]+\.zip$') ||
+      asset="$GHIDRA_ZIP_URL $GHIDRA_ZIP_SHA256"
     read -r url sha <<<"$asset"
     download "$url" "$TOOLS_DIR/ghidra.zip" "$sha"
     unzip -q -o "$TOOLS_DIR/ghidra.zip" -d "$TOOLS_DIR"

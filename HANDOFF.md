@@ -1,6 +1,6 @@
 # Handoff: analisi di un APK con REA
 
-Aggiornato il 13/10/2026, alla fine della sessione "Preparazione repo rea".
+Aggiornato il 13/10/2026, dopo la seconda sessione (preparazione di REA eseguita con successo).
 
 ## Obiettivo
 
@@ -63,6 +63,12 @@ drive.google.com
 drive.usercontent.google.com
 ```
 
+Nella seconda sessione github.com (download diretti delle release, `git clone`) e
+Google Drive passavano, ma il proxy rispondeva 403 su `api.github.com` per le repo
+non collegate alla sessione. `setup-rea.sh` ora ripiega da solo sugli URL diretti:
+apktool prende l'ultimo tag con `git ls-remote` (SHA-256 solo stampato; la 3.0.3 era
+identica alla copia su Bitbucket), Ghidra usa URL e SHA-256 fissati nello script.
+
 ## Stato lasciato dalla sessione precedente
 
 - **Correzione della build di REA**: il `main` di `LBNM-ONE/rea` al commit `c45d912`
@@ -73,6 +79,7 @@ drive.usercontent.google.com
   caso il controllo di fine turno chiederà di committarla: committala sul branch
   della sessione con lo stesso messaggio
   (`fix(android): keep direct invoke coverage JSON-compatible`).
+  Il 13/10/2026 `main` (commit `fd65e27`) non conteneva ancora la correzione.
 - **Hook pre-push di rea**: `npm run check:fast` fallisce per 4 errori di lint
   (`max-lines-per-function`) già presenti su `main`, in file di test:
   `tests/boundary/providers/ghidra/ghidraLauncher.test.ts`,
